@@ -1,0 +1,65 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id       Int    @id @default(autoincrement())
+  email    String @unique @db.VarChar(100)
+  username String @unique @db.VarChar(50)
+  password String
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  Session    Session[]
+  person     Person    @relation(fields: [person_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  person_id  Int
+
+  @@unique([email, username])
+  @@index([email, person_id])
+  @@map("m_users")
+}
+
+model Session {
+  id              Int      @id @default(autoincrement())
+  expiration_date DateTime
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  user_id Int
+
+  // non-unique foreign key
+  @@index([user_id])
+  @@map("m_sessions")
+}
+
+model Person {
+  id                    Int     @id @default(autoincrement())
+  nik                   String  @unique @db.VarChar(16)
+  name                  String  @db.VarChar(100)
+  sign                  String?
+  practitioner_number   String? @db.VarChar(50)
+  medical_record_number String? @db.VarChar(50)
+  tenant_id             String?
+  active                Boolean @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  User User[]
+
+  @@index([nik])
+  @@map("m_persons")
+}

@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  @apply bg-white;
+
+  /* @media (prefers-color-scheme: dark) { */
+  /*   color-scheme: dark; */
+  /* } */
+
+  @font-face {
+    font-family: "Avenir Next LT Pro";
+    font-weight: 400;
+    font-style: normal;
+    src: url("/fonts/AvenirNextLTPro-Regular.otf") format("opentype");
+  }
+
+  @font-face {
+    font-family: "Avenir Next LT Pro";
+    font-weight: 500;
+    font-style: normal;
+    src: url("/fonts/AvenirNextLTPro-Medium.otf") format("opentype");
+  }
+
+  @font-face {
+    font-family: "Avenir Next LT Pro";
+    font-weight: 600;
+    font-style: normal;
+    src: url("/fonts/AvenirNextLTPro-Demi.otf") format("opentype");
+  }
+
+  @font-face {
+    font-family: "Avenir Next LT Pro";
+    font-weight: 700;
+    font-style: normal;
+    src: url("/fonts/AvenirNextLTPro-Bold.otf") format("opentype");
+  }
+
+  .debug {
+    @apply border border-red-500;
+  }
+
+  /* NOTE: for some reason the progress was incorrectly render at the bottom of the page */
+  /* so this additional style here was to correctly positioning it at the top of the page */
+  .mantine-Progress-root {
+    @apply absolute top-0;
+  }
+}
