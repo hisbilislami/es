@@ -1,10 +1,11 @@
 import { createId as cuid } from "@paralleldrive/cuid2";
-import { z } from "zod";
-import { combineHeaders } from "./http";
 import { createCookieSessionStorage, redirect } from "@remix-run/node";
-import { invariant } from "@epic-web/invariant";
+import { z } from "zod";
 
-invariant(process.env.SESSION_SECRET!, "SESSION_SECRET must be set");
+import { env } from "./env.server";
+import { combineHeaders } from "./http";
+
+const { SESSION_SECRET } = env();
 export const toastKey = "toast";
 
 const ToastSchema = z.object({
@@ -24,7 +25,7 @@ export const toastSessionStorage = createCookieSessionStorage({
     sameSite: "lax",
     path: "/",
     httpOnly: true,
-    secrets: [process.env.SESSION_SECRET],
+    secrets: [SESSION_SECRET],
     secure: process.env.NODE_ENV === "production",
   },
 });
@@ -32,7 +33,7 @@ export const toastSessionStorage = createCookieSessionStorage({
 export async function redirectWithToast(
   url: string,
   toast: ToastInput,
-  init?: ResponseInit
+  init?: ResponseInit,
 ) {
   return redirect(url, {
     ...init,
@@ -50,7 +51,7 @@ export async function createToastHeaders(toastInput: ToastInput) {
 
 export async function getToast(request: Request) {
   const session = await toastSessionStorage.getSession(
-    request.headers.get("cookie")
+    request.headers.get("cookie"),
   );
   const result = ToastSchema.safeParse(session.get(toastKey));
   const toast = result.success ? result.data : null;

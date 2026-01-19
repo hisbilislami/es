@@ -4,6 +4,8 @@ import {
   useParams,
   useRouteError,
 } from "@remix-run/react";
+import { captureRemixErrorBoundaryError } from "@sentry/remix";
+
 import { getErrorMessage } from "~/utils/error-boundary";
 
 type StatusHandler = (info: {
@@ -29,6 +31,13 @@ function GeneralErrorBoundary({
 
   if (typeof document !== "undefined") {
     console.error(error);
+  }
+
+  if (
+    error &&
+    (process.env.NODE_ENV === "production" || process.env.NODE_ENV === "test")
+  ) {
+    captureRemixErrorBoundaryError(error);
   }
 
   return (

@@ -1,32 +1,51 @@
-import { useEffect } from "react";
+import {
+  ColorSchemeScript,
+  MantineProvider,
+  mantineHtmlProps,
+} from "@mantine/core";
+import { DatesProvider } from "@mantine/dates";
+import { Notifications } from "@mantine/notifications";
+import { NavigationProgress, nprogress } from "@mantine/nprogress";
+import type { LinksFunction, LoaderFunctionArgs } from "@remix-run/node";
 import {
   data,
   Links,
   Meta,
+  MetaFunction,
   Outlet,
   Scripts,
   ScrollRestoration,
   useLoaderData,
   useNavigation,
 } from "@remix-run/react";
-import type { LinksFunction, LoaderFunctionArgs } from "@remix-run/node";
-import {
-  ColorSchemeScript,
-  MantineProvider,
-  mantineHtmlProps,
-} from "@mantine/core";
-import { NavigationProgress, nprogress } from "@mantine/nprogress";
+import { useEffect } from "react";
+import "dayjs/locale/id";
 
 import "@mantine/nprogress/styles.css";
 import "@mantine/notifications/styles.css";
 import "@mantine/core/styles.css";
+import "@mantine/dates/styles.css";
+import "@mantine/dropzone/styles.css";
 
-import { theme } from "./utils/mantine-config";
-import { getToast } from "./utils/toast.server";
+import "react-pdf/dist/Page/AnnotationLayer.css";
+import "react-pdf/dist/Page/TextLayer.css";
+
+import DialogMessage from "./components/dialog/dialog-message";
+import GeneralErrorBoundary from "./components/error-boundary/general-error-boundary";
+import { DialogProvider, useDialog } from "./context/DialogContext";
+import { getDialog } from "./utils/dialog.server";
 import { combineHeaders } from "./utils/http";
-import { useToast } from "./utils/hooks/use-toast";
+import { theme } from "./utils/mantine-config";
+
 import "./tailwind.css";
-import { Notifications } from "@mantine/notifications";
+
+export const meta: MetaFunction = () => {
+  return [
+    {
+      title: "E-Sign",
+    },
+  ];
+};
 
 export const links: LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -42,20 +61,46 @@ export const links: LinksFunction = () => [
 ];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { toast, headers: toastHeaders } = await getToast(request);
+  const { dialog, headers: dialogHeaders } = await getDialog(request);
 
   return data(
     {
-      toast,
+      dialog,
+      ENV: {
+        SENTRY_DSN: process.env.SENTRY_DSN,
+        NODE_ENV: process.env.NODE_ENV,
+      },
     },
     {
-      headers: combineHeaders(toastHeaders),
-    }
+      headers: combineHeaders(dialogHeaders),
+    },
   );
 };
 
+function ShowServerDialog() {
+  const data = useLoaderData<typeof loader>();
+
+  const dialog = data?.dialog ?? null;
+  const { showDialog } = useDialog();
+
+  useEffect(() => {
+    if (dialog) {
+      showDialog({
+        title: dialog.title,
+        description: dialog.description,
+        icon: dialog.icon,
+        type: dialog.type,
+        confirmText: dialog.confirmText,
+      });
+    }
+  }, [dialog, showDialog]);
+
+  return null;
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { toast: toastData } = useLoaderData<typeof loader>();
+  const data = useLoaderData<typeof loader>();
+  const ENV = data?.ENV ?? {};
   const navigation = useNavigation();
   useEffect(() => {
     if (navigation.state !== "idle") {
@@ -65,23 +110,51 @@ export function Layout({ children }: { children: React.ReactNode }) {
     }
   }, [navigation.state]);
 
-  useToast(toastData);
-
   return (
     <html lang="en" {...mantineHtmlProps}>
       <head>
+        {/* Inject ENV variables into window.ENV */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.ENV = ${JSON.stringify(ENV)};`,
+          }}
+        />
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <ColorSchemeScript />
         <Meta />
         <Links />
+        <link
+          rel="apple-touch-icon"
+          sizes="180x180"
+          href="/apple-icon-180x180.png"
+        />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="192x192"
+          href="/android-icon-192x192.png"
+        />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="96x96"
+          href="/favicon-96x96.png"
+        />
+        <link rel="manifest" href="/site.webmanifest" />
       </head>
-      <body>
-        <MantineProvider theme={theme}>
-          <NavigationProgress zIndex={9999} />
-          <Notifications />
-          {children}
-        </MantineProvider>
+      <body className="overflow-hidden">
+        <DialogProvider>
+          <MantineProvider theme={theme}>
+            <DatesProvider settings={{ locale: "id" }}>
+              <NavigationProgress zIndex={9999} />
+              <Notifications />
+              <DialogMessage />
+              <ShowServerDialog />
+              {children}
+            </DatesProvider>
+          </MantineProvider>
+        </DialogProvider>
         <ScrollRestoration />
         <Scripts />
       </body>
@@ -91,4 +164,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return <Outlet />;
+}
+
+export function ErrorBoundary() {
+  return <GeneralErrorBoundary />;
 }

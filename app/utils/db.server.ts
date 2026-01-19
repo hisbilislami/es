@@ -1,6 +1,7 @@
 import { remember } from "@epic-web/remember";
 // Changed import due to issue: https://github.com/remix-run/react-router/pull/12644
-import { PrismaClient } from "@prisma/client/index.js";
+import { PrismaClient, Prisma } from "@prisma/client/index.js";
+import * as Sentry from "@sentry/remix";
 import chalk from "chalk";
 
 export const prisma = remember("prisma", () => {
@@ -23,15 +24,36 @@ export const prisma = remember("prisma", () => {
       e.duration < logThreshold * 1.1
         ? "green"
         : e.duration < logThreshold * 1.2
-        ? "blue"
-        : e.duration < logThreshold * 1.3
-        ? "yellow"
-        : e.duration < logThreshold * 1.4
-        ? "redBright"
-        : "red";
+          ? "blue"
+          : e.duration < logThreshold * 1.3
+            ? "yellow"
+            : e.duration < logThreshold * 1.4
+              ? "redBright"
+              : "red";
     const dur = chalk[color](`${e.duration}ms`);
-    console.info(`prisma:query - ${dur} - ${e.query}`);
+    console.debug(`prisma:query - ${dur} - ${e.query}`);
   });
+  client.$use(async (params, next) => {
+    try {
+      return await next(params);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        Sentry.captureException(
+          new Error(`Prisma Error [${error.code}]: ${error.message}`),
+          {
+            extra: { code: error.code, target: error.meta?.target },
+          },
+        );
+      } else if (
+        error instanceof Error &&
+        !error.message.includes("threadsafe function")
+      ) {
+        Sentry.captureException(error);
+      }
+      throw error;
+    }
+  });
+
   void client.$connect();
   return client;
 });

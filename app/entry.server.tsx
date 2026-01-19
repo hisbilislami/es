@@ -6,11 +6,78 @@
 
 import { PassThrough } from "node:stream";
 
-import type { AppLoadContext, EntryContext } from "@remix-run/node";
+import type {
+  ActionFunctionArgs,
+  AppLoadContext,
+  EntryContext,
+  LoaderFunctionArgs,
+} from "@remix-run/node";
 import { createReadableStreamFromReadable } from "@remix-run/node";
 import { RemixServer } from "@remix-run/react";
+import * as Sentry from "@sentry/remix";
+import chalk from "chalk";
 import { isbot } from "isbot";
 import { renderToPipeableStream } from "react-dom/server";
+
+import { scheduleJob } from "./task/schedule-job.server";
+
+const SENTRY_DSN = process.env.SENTRY_DSN;
+if (
+  SENTRY_DSN &&
+  (process.env.NODE_ENV === "production" || process.env.NODE_ENV === "test")
+) {
+  Sentry.init({
+    dsn: SENTRY_DSN,
+    tracesSampleRate: 0,
+    // The Prisma integration is currently commented out due to an unresolved issue
+    // in the Sentry SDK related to how it handles Prisma instrumentation.
+    // Reference: https://github.com/getsentry/sentry-javascript/issues/11216
+    //
+    // When enabled, this integration causes unexpected behavior in the server response,
+    // particularly with Turbo Stream responses, leading to decoding errors.
+    //
+    // This issue is present in production but does not occur in local development,
+    // indicating a possible difference in runtime environments.
+    //
+    // Until an official fix is released by Sentry, we have temporarily disabled the Prisma integration
+    // to ensure proper server functionality.
+    //
+    // To track progress on this issue, monitor the linked GitHub discussion above.
+    //
+    // Uncomment the following block once Sentry provides a fix.
+
+    /* integrations: */
+    /*   process.env.NODE_ENV === "production" || process.env.NODE_ENV === "test" */
+    /*     ? [ */
+    /*         Sentry.prismaIntegration({ */
+    /*           prismaInstrumentation: new PrismaInstrumentation(), */
+    /*         }), */
+    /*       ] */
+    /*     : [], */
+  });
+}
+
+scheduleJob()
+  .then(() => console.log("🎯 Scheduler job registered on startup."))
+  .catch((err) => console.error("⚠️ Failed to register scheduler job:", err));
+
+export function handleError(
+  error: unknown,
+  { request }: LoaderFunctionArgs | ActionFunctionArgs,
+): void {
+  // Skip capturing if the request is aborted as Remix docs suggest
+  // Ref: https://remix.run/docs/en/main/file-conventions/entry.server#handleerror
+  if (request.signal.aborted) {
+    return;
+  }
+  if (error instanceof Error) {
+    console.error(chalk.red(error.stack));
+    void Sentry.captureException(error);
+  } else {
+    console.error(error);
+    Sentry.captureException(error);
+  }
+}
 
 const ABORT_DELAY = 5_000;
 
@@ -22,20 +89,20 @@ export default function handleRequest(
   // This is ignored so we can keep it in the template for visibility.  Feel
   // free to delete this parameter in your app if you're not using it!
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  loadContext: AppLoadContext
+  loadContext: AppLoadContext,
 ) {
   return isbot(request.headers.get("user-agent") || "")
     ? handleBotRequest(
         request,
         responseStatusCode,
         responseHeaders,
-        remixContext
+        remixContext,
       )
     : handleBrowserRequest(
         request,
         responseStatusCode,
         responseHeaders,
-        remixContext
+        remixContext,
       );
 }
 
@@ -43,7 +110,7 @@ function handleBotRequest(
   request: Request,
   responseStatusCode: number,
   responseHeaders: Headers,
-  remixContext: EntryContext
+  remixContext: EntryContext,
 ) {
   return new Promise((resolve, reject) => {
     let shellRendered = false;
@@ -65,7 +132,7 @@ function handleBotRequest(
             new Response(stream, {
               headers: responseHeaders,
               status: responseStatusCode,
-            })
+            }),
           );
 
           pipe(body);
@@ -82,7 +149,7 @@ function handleBotRequest(
             console.error(error);
           }
         },
-      }
+      },
     );
 
     setTimeout(abort, ABORT_DELAY);
@@ -93,7 +160,7 @@ function handleBrowserRequest(
   request: Request,
   responseStatusCode: number,
   responseHeaders: Headers,
-  remixContext: EntryContext
+  remixContext: EntryContext,
 ) {
   return new Promise((resolve, reject) => {
     let shellRendered = false;
@@ -115,7 +182,7 @@ function handleBrowserRequest(
             new Response(stream, {
               headers: responseHeaders,
               status: responseStatusCode,
-            })
+            }),
           );
 
           pipe(body);
@@ -132,7 +199,7 @@ function handleBrowserRequest(
             console.error(error);
           }
         },
-      }
+      },
     );
 
     setTimeout(abort, ABORT_DELAY);
